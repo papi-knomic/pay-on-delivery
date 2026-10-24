@@ -1,4 +1,4 @@
-import { DELIVERY_STATES } from '@pod/shared';
+import { AGENT_ACTIONS, DELIVERY_STATES } from '@pod/shared';
 import { sql } from 'drizzle-orm';
 import {
   boolean,
@@ -31,13 +31,7 @@ const usdOnly = (table: string, col: AnyPgColumn) =>
 
 export const deliveryStatus = pgEnum('delivery_status', DELIVERY_STATES);
 
-export const agentAction = pgEnum('agent_action', [
-  'capture',
-  'partial_capture',
-  'request_evidence',
-  'void',
-  'escalate',
-]);
+export const agentAction = pgEnum('agent_action', AGENT_ACTIONS);
 
 export const paymentKind = pgEnum('payment_kind', ['authorization', 'capture', 'void', 'refund']);
 
