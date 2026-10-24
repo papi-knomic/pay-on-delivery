@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: pod
+      POSTGRES_PASSWORD: pod
+      POSTGRES_DB: pod
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U pod -d pod']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Whole app in one container (same image as production). Opt-in:
+  #   docker compose --profile full up --build
+  app:
+    profiles: [full]
+    build:
+      context: .
+      args:
+        # Baked into the web bundle at build time (read from .env by compose interpolation).
+        VITE_AG_GRID_LICENSE_KEY: ${VITE_AG_GRID_LICENSE_KEY:-}
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Overrides .env: inside the compose network the services are reached by name.
+      DATABASE_URL: postgres://pod:pod@postgres:5432/pod
+      REDIS_URL: redis://redis:6379
+      API_PORT: '3000'
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
+    ports:
+      - '${APP_PORT:-3000}:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:

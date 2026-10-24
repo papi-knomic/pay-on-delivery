@@ -1,0 +1,39 @@
+{
+  "name": "api",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "dist",
+    "drizzle"
+  ],
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/server.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "db:generate": "pnpm --filter @pod/shared build && drizzle-kit generate",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "smoke:authorize-capture": "tsx scripts/smoke-authorize-capture.ts",
+    "smoke:void": "tsx scripts/smoke-void.ts",
+    "smoke:payout": "tsx scripts/smoke-payout.ts"
+  },
+  "dependencies": {
+    "@fastify/static": "^10.1.5",
+    "@kn0mic/reshaper": "^1.0.2",
+    "@pod/shared": "workspace:*",
+    "bullmq": "^6.3.11",
+    "drizzle-orm": "^0.45.3",
+    "fastify": "^5.12.5",
+    "ioredis": "^6.0.0",
+    "pg": "^8.23.1",
+    "pino": "^10.4.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "^0.31.11",
+    "pino-pretty": "^13.2.0"
+  }
+}

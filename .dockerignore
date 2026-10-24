@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/coverage
+**/*.log
+logs
+.env
+.env.*
+.git
+.gitignore
+.vscode
+.idea
+apps/api/public
+Dockerfile
+.dockerignore

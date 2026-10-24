@@ -1,0 +1,12 @@
+packages:
+  - apps/*
+  - packages/*
+# Workspace deps are copied (not symlinked) into consumers, which `pnpm deploy` needs to produce a
+# self-contained bundle for the Docker image. Dev still uses live source via tsconfig paths / Vite aliases.
+injectWorkspacePackages: true
+# Re-sync the injected copy of a workspace package after its `build` script runs (e.g. shared's dist).
+syncInjectedDepsAfterScripts:
+  - build
+allowBuilds:
+  esbuild: true
+  msgpackr-extract: false

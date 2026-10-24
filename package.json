@@ -1,0 +1,38 @@
+{
+  "name": "pay-on-delivery",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pay-on-delivery payment layer: authorize at checkout, capture after an AI agent verifies proof of delivery.",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@11.20.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter api --filter web dev",
+    "build": "pnpm -r build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "typecheck": "pnpm -r typecheck",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:generate": "pnpm --filter api db:generate",
+    "db:migrate": "pnpm --filter api db:migrate",
+    "smoke:authorize-capture": "pnpm --filter api smoke:authorize-capture",
+    "smoke:void": "pnpm --filter api smoke:void",
+    "smoke:payout": "pnpm --filter api smoke:payout"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.20.5",
+    "eslint": "^10.12.0",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.9",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "^5.0.3"
+  }
+}
