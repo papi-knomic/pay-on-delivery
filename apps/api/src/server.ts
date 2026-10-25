@@ -7,12 +7,15 @@ import { createLanguageModel } from './agent/model.js';
 import { createVerifier } from './agent/verify.js';
 import { aiConfigFrom, loadServerEnv } from './env.js';
 import { createEvidenceService } from './evidence/service.js';
+import { createCheckoutService } from './checkout/service.js';
 import {
   enqueueSettlement,
   enqueueVerification,
+  scheduleAuthorizationLifecycle,
   schedulePayoutPoll,
   startJobs,
 } from './jobs/worker.js';
+import { createAuthorizationLifecycle } from './lifecycle/authorization.js';
 import { createLogger } from './logger.js';
 import { createPayPalClient } from './paypal/index.js';
 import { createSettlement } from './settlement/settlement.js';
@@ -56,15 +59,31 @@ async function main(): Promise<void> {
       await enqueueSettlement(jobs.queue, deliveryId);
     },
   });
+  const lifecycle = createAuthorizationLifecycle({ db, logger, paypal });
   const jobs = startJobs(env.REDIS_URL, logger, {
     'verify-delivery': (job) => verifyDelivery(job.data.deliveryId),
     'settle-delivery': (job) => settlement.settle(job.data.deliveryId),
     'poll-payout': (job) => settlement.pollPayout(job.data.deliveryId, job.data.attempt ?? 1),
+    'flag-honor-period': (job) => lifecycle.flagHonorPeriod(job.data.deliveryId),
+    reauthorize: (job) => lifecycle.reauthorize(job.data.deliveryId),
+    'expire-authorization': (job) => lifecycle.expire(job.data.deliveryId),
+  });
+  const checkout = createCheckoutService({
+    db,
+    logger,
+    paypal,
+    publicBaseUrl: env.PUBLIC_BASE_URL,
+    onAuthorized: async (delivery) => {
+      if (delivery.authorizedAt) {
+        await scheduleAuthorizationLifecycle(jobs.queue, delivery.id, delivery.authorizedAt);
+      }
+    },
   });
 
   const app = await buildApp({
     logger,
     db,
+    checkout,
     evidence: createEvidenceService({
       db,
       logger,
@@ -76,7 +95,7 @@ async function main(): Promise<void> {
     paypal,
     webhookStore: drizzleWebhookEventStore(db),
     webhookId: env.PAYPAL_WEBHOOK_ID,
-    onWebhookEvent: createWebhookProcessor({ db, logger, settlement }),
+    onWebhookEvent: createWebhookProcessor({ db, logger, settlement, checkout }),
     healthChecks: {
       db: async () => {
         await db.execute(sql`select 1`);

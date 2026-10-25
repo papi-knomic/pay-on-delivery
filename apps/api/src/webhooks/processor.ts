@@ -1,5 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
+import type { CheckoutService } from '../checkout/service.js';
 import type { Db } from '../db/client.js';
 import { payments } from '../db/schema.js';
 import type { Logger } from '../logger.js';
@@ -37,11 +38,19 @@ export function createWebhookProcessor(deps: {
   db: Db;
   logger: Logger;
   settlement: Settlement;
+  checkout: Pick<CheckoutService, 'authorizeByOrderId'>;
 }): (event: PayPalWebhookEvent) => Promise<void> {
   const log = deps.logger.child({ component: 'webhooks' });
 
   return async (event) => {
     const type = event.event_type;
+
+    // Backup for a buyer who approves and closes the tab before our return page authorizes.
+    if (type === 'CHECKOUT.ORDER.APPROVED' && event.resource?.id) {
+      const result = await deps.checkout.authorizeByOrderId(event.resource.id);
+      log.info({ orderId: event.resource.id, ok: result.ok }, 'order approved');
+      return;
+    }
 
     if (type.startsWith('PAYMENT.PAYOUTS-ITEM.')) {
       const item = payoutItemResource.parse(event.resource);

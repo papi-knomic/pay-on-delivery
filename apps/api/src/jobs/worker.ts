@@ -1,3 +1,4 @@
+import { authorizationSchedule } from '@pod/shared';
 import { Queue, UnrecoverableError, Worker, type Job } from 'bullmq';
 import type { Logger } from '../logger.js';
 
@@ -57,6 +58,33 @@ export function enqueueSettlement(
   deliveryId: string,
 ): Promise<unknown> {
   return queue.add('settle-delivery', { deliveryId }, { ...RETRY, jobId: `settle-${deliveryId}` });
+}
+
+/** Day 3 / 4 / 29 jobs, timed from the ORIGINAL authorization (see authorizationSchedule). */
+export async function scheduleAuthorizationLifecycle(
+  queue: Queue<LifecycleJobData>,
+  deliveryId: string,
+  authorizedAt: Date,
+): Promise<void> {
+  const schedule = authorizationSchedule(authorizedAt);
+  const delay = (at: Date) => Math.max(0, at.getTime() - Date.now());
+  await Promise.all([
+    queue.add(
+      'flag-honor-period',
+      { deliveryId },
+      { ...RETRY, delay: delay(schedule.flagHonorPeriodAt), jobId: `honor-${deliveryId}` },
+    ),
+    queue.add(
+      'reauthorize',
+      { deliveryId },
+      { ...RETRY, delay: delay(schedule.reauthorizeAt), jobId: `reauth-${deliveryId}` },
+    ),
+    queue.add(
+      'expire-authorization',
+      { deliveryId },
+      { ...RETRY, delay: delay(schedule.expireAt), jobId: `expire-${deliveryId}` },
+    ),
+  ]);
 }
 
 export function schedulePayoutPoll(

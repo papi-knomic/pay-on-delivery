@@ -161,7 +161,7 @@ corepack enable             # pnpm version pinned via package.json "packageManag
 pnpm install
 docker compose up -d        # postgres :5432 + redis :6379
 pnpm db:migrate
-pnpm db:seed                # TODO: demo merchants, riders, deliveries (not written yet)
+pnpm db:seed                # demo merchants + riders (idempotent); demo deliveries still TODO
 pnpm dev                    # api :3000 (tsx watch) + web :5173 (Vite, proxies /api /health /webhooks)
 pnpm test                   # vitest (shared + api projects)
 pnpm lint                   # type-aware eslint

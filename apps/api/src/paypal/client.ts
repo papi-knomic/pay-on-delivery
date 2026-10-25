@@ -91,7 +91,26 @@ export class PayPalClient {
     returnUrl: string;
     cancelUrl: string;
     brandName?: string;
+    /** Shown to the buyer on the PayPal page. Items + shipping must add up to `amount`. */
+    items?: readonly { name: string; quantity: number; unitCents: number }[];
+    shippingCents?: number;
   }): Promise<PayPalOrder> {
+    let breakdown: Record<string, unknown> | undefined;
+    if (input.items?.length) {
+      const itemTotal = input.items.reduce((sum, i) => sum + i.quantity * i.unitCents, 0);
+      const shipping = input.shippingCents ?? 0;
+      if (itemTotal + shipping !== input.amount.cents) {
+        return Promise.reject(
+          new RangeError(
+            `Order items (${itemTotal}) + shipping (${shipping}) must equal the amount (${input.amount.cents})`,
+          ),
+        );
+      }
+      breakdown = {
+        item_total: money({ cents: itemTotal }),
+        ...(shipping > 0 && { shipping: money({ cents: shipping }) }),
+      };
+    }
     return this.request({
       method: 'POST',
       path: '/v2/checkout/orders',
@@ -106,7 +125,14 @@ export class PayPalClient {
             reference_id: input.deliveryId,
             custom_id: input.deliveryId,
             description: input.description,
-            amount: money(input.amount),
+            amount: breakdown ? { ...money(input.amount), breakdown } : money(input.amount),
+            ...(breakdown && {
+              items: input.items?.map((i) => ({
+                name: i.name.slice(0, 127),
+                quantity: String(i.quantity),
+                unit_amount: money({ cents: i.unitCents }),
+              })),
+            }),
           },
         ],
         payment_source: {

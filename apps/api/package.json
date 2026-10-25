@@ -15,6 +15,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:generate": "pnpm --filter @pod/shared build && drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
+    "db:seed": "tsx src/db/seed.ts",
     "smoke:authorize-capture": "tsx scripts/smoke-authorize-capture.ts",
     "smoke:void": "tsx scripts/smoke-void.ts",
     "smoke:payout": "tsx scripts/smoke-payout.ts",

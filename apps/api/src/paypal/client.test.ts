@@ -159,6 +159,55 @@ describe('PayPalClient', () => {
     expect(sent.payment_source.paypal).toBeDefined();
   });
 
+  it('createOrder sends line items with a breakdown that adds up', async () => {
+    const { fetchMock, apiCalls } = fakePayPal(() =>
+      json({ id: 'ORDER-2', status: 'PAYER_ACTION_REQUIRED', links: [] }),
+    );
+    await client(fetchMock).createOrder({
+      deliveryId: 'dlv_2',
+      amount: { cents: 2500 },
+      returnUrl: 'https://example.com/ok',
+      cancelUrl: 'https://example.com/cancel',
+      items: [
+        { name: 'Blender', quantity: 1, unitCents: 1800 },
+        { name: 'Plantain chips', quantity: 2, unitCents: 200 },
+      ],
+      shippingCents: 300,
+    });
+    const unit = (body(apiCalls()[0]!.init) as { purchase_units: Array<Record<string, unknown>> })
+      .purchase_units[0]!;
+    expect(unit.amount).toEqual({
+      currency_code: 'USD',
+      value: '25.00',
+      breakdown: {
+        item_total: { currency_code: 'USD', value: '22.00' },
+        shipping: { currency_code: 'USD', value: '3.00' },
+      },
+    });
+    expect(unit.items).toEqual([
+      { name: 'Blender', quantity: '1', unit_amount: { currency_code: 'USD', value: '18.00' } },
+      {
+        name: 'Plantain chips',
+        quantity: '2',
+        unit_amount: { currency_code: 'USD', value: '2.00' },
+      },
+    ]);
+  });
+
+  it('createOrder refuses items that do not add up to the amount', async () => {
+    const { fetchMock, apiCalls } = fakePayPal(() => json({}));
+    await expect(
+      client(fetchMock).createOrder({
+        deliveryId: 'dlv_3',
+        amount: { cents: 2500 },
+        returnUrl: 'https://example.com/ok',
+        cancelUrl: 'https://example.com/cancel',
+        items: [{ name: 'Blender', quantity: 1, unitCents: 1800 }],
+      }),
+    ).rejects.toThrow(RangeError);
+    expect(apiCalls()).toHaveLength(0);
+  });
+
   it('captureAuthorization always sends final_capture: true, with and without a partial amount', async () => {
     const { fetchMock, apiCalls } = fakePayPal(() => json({ id: 'CAP-1', status: 'COMPLETED' }));
     const paypal = client(fetchMock);

@@ -56,7 +56,7 @@ You receive the order, the rider's proof-of-delivery photo, deterministic check 
 
 Actions:
 - capture: the whole order was delivered.
-- partial_capture: only part of the order was delivered or accepted (for example the buyer refused a damaged item). Set captureAmount to the USD value of what was actually delivered, as a decimal string like "7.00".
+- partial_capture: only part of the order was delivered or accepted (for example the buyer refused a damaged item). Set captureAmount to the USD value of the items actually delivered plus the delivery fee (the rider made the trip either way), as a decimal string like "10.00".
 - request_evidence: the evidence is unclear but a better photo could fix it (blurry, package not visible, bad angle). Set riderMessage to a short, polite instruction for the rider.
 - void: you are confident the delivery did not happen and the buyer should not be charged. A human confirms voids.
 - escalate: anything suspicious or ambiguous that a person should review.
@@ -83,7 +83,7 @@ export function describeContext({ delivery, evidence }: AgentContext): string {
   const checks = evidence.checks.map((c) => `- ${c.name}: ${c.status}. ${c.detail}`).join('\n');
   return [
     `Delivery ${delivery.id}`,
-    `Order total ${usd(delivery.amountCents)} USD, of which the rider fee is ${usd(delivery.riderFeeCents)}.`,
+    `Order total ${usd(delivery.amountCents)} USD: the items below plus a ${usd(delivery.riderFeeCents)} delivery fee that the rider earns.`,
     `Items:\n${items}`,
     `Delivery address: ${delivery.deliveryAddress}`,
     `Evidence attempt ${evidence.attempt}, uploaded ${evidence.uploadedAt.toISOString()}; ${taken}.`,

@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { pino } from 'pino';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../app.js';
+import type { CheckoutService } from '../checkout/service.js';
 import type { Db } from '../db/client.js';
 import type { Evidence } from '../db/schema.js';
 import type {
@@ -39,6 +40,7 @@ async function setup(result: SubmitEvidenceResult = { ok: true, evidence: row })
     logger: pino({ level: 'silent' }),
     db: {} as Db,
     evidence,
+    checkout: {} as CheckoutService,
     paypal: { verifyWebhookSignature: async () => true },
     webhookStore: { record: async () => 'new', markProcessed: async () => {} },
     webhookId: 'WHID',

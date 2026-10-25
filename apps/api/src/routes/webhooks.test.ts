@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../app.js';
 import type { Db } from '../db/client.js';
 import type { NewWebhookEvent } from '../db/schema.js';
+import type { CheckoutService } from '../checkout/service.js';
 import type { EvidenceService } from '../evidence/service.js';
 import type { PayPalWebhookEvent } from './webhooks.js';
 import type { WebhookEventStore } from '../webhooks/store.js';
@@ -57,6 +58,7 @@ async function setup(
     logger: pino({ level: 'silent' }),
     db: {} as Db, // webhook route doesn't touch the DB directly
     evidence: {} as EvidenceService,
+    checkout: {} as CheckoutService,
     paypal: { verifyWebhookSignature },
     webhookStore: store,
     webhookId: 'webhookId' in opts ? opts.webhookId : 'WHID',

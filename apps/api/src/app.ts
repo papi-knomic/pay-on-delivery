@@ -3,9 +3,11 @@ import { join } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import { Resource } from '@kn0mic/reshaper';
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
+import type { CheckoutService } from './checkout/service.js';
 import type { Db } from './db/client.js';
 import type { EvidenceService } from './evidence/service.js';
 import type { PayPalClient } from './paypal/index.js';
+import { checkoutRoutes } from './routes/checkout.js';
 import { deliveryRoutes } from './routes/deliveries.js';
 import { evidenceRoutes } from './routes/evidence.js';
 import { healthRoutes, type HealthChecks } from './routes/health.js';
@@ -15,6 +17,7 @@ import type { WebhookEventStore } from './webhooks/store.js';
 export interface AppDeps {
   logger: FastifyBaseLogger;
   db: Db;
+  checkout: CheckoutService;
   evidence: EvidenceService;
   paypal: Pick<PayPalClient, 'verifyWebhookSignature'>;
   webhookStore: WebhookEventStore;
@@ -37,6 +40,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(healthRoutes, { checks: deps.healthChecks });
   await app.register(deliveryRoutes, { prefix: '/api', db: deps.db });
   await app.register(evidenceRoutes, { prefix: '/api', evidence: deps.evidence });
+  await app.register(checkoutRoutes, { prefix: '/api', checkout: deps.checkout });
   await app.register(webhookRoutes, {
     prefix: '/webhooks',
     paypal: deps.paypal,
