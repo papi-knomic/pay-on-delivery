@@ -57,9 +57,13 @@ RUN apk add --no-cache tini
 ENV NODE_ENV=production \
     API_PORT=3000 \
     API_HOST=0.0.0.0 \
-    UV_THREADPOOL_SIZE=16
+    UV_THREADPOOL_SIZE=16 \
+    UPLOAD_DIR=/app/uploads
 WORKDIR /app
 COPY --from=build --chown=node:node /out ./
+# Rider photos. Mount a volume here; a fresh named volume inherits this node-owned directory.
+RUN mkdir -p /app/uploads && chown node:node /app/uploads
+VOLUME /app/uploads
 COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 USER node
 EXPOSE 3000

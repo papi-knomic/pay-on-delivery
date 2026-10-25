@@ -1,5 +1,6 @@
 import type { DeliveryStatus } from './delivery-state.js';
 import type { PayPalCurrency } from './money.js';
+import type { CheckResult } from './verification.js';
 
 /** Output of apps/api DeliveryResource. Money fields are decimal strings ("12.50"); never do float math on them. */
 export interface DeliveryDto {
@@ -20,6 +21,19 @@ export interface DeliveryDto {
   paypalOrderId?: string;
   currentAuthorizationId?: string;
   honorPeriodFlaggedAt?: string;
+}
+
+/** Output of apps/api EvidenceResource. */
+export interface EvidenceDto {
+  id: string;
+  deliveryId: string;
+  attempt: number;
+  photoUrl: string;
+  photoTakenAt?: string;
+  createdAt: string;
+  // Ops-only
+  gps?: { lat: number; lng: number; accuracyM?: number };
+  checks?: CheckResult[];
 }
 
 export interface PaginationMeta {

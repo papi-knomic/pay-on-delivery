@@ -4,6 +4,7 @@ import { Redis } from 'ioredis';
 import { buildApp } from './app.js';
 import { createDb } from './db/client.js';
 import { loadServerEnv } from './env.js';
+import { createEvidenceService } from './evidence/service.js';
 import { startJobs } from './jobs/worker.js';
 import { createLogger } from './logger.js';
 import { createPayPalClient } from './paypal/index.js';
@@ -28,6 +29,7 @@ async function main(): Promise<void> {
   const app = await buildApp({
     logger,
     db,
+    evidence: createEvidenceService({ db, logger, uploadDir: env.UPLOAD_DIR }),
     paypal,
     webhookStore: drizzleWebhookEventStore(db),
     webhookId: env.PAYPAL_WEBHOOK_ID,

@@ -1,4 +1,4 @@
-import { AGENT_ACTIONS, DELIVERY_STATES } from '@pod/shared';
+import { AGENT_ACTIONS, DELIVERY_STATES, type CheckResult } from '@pod/shared';
 import { sql } from 'drizzle-orm';
 import {
   boolean,
@@ -12,6 +12,7 @@ import {
   real,
   text,
   timestamp,
+  unique,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 
@@ -119,6 +120,34 @@ export const shipments = pgTable(
   (t) => [index('shipments_delivery_idx').on(t.deliveryId)],
 );
 
+/** One row per rider upload. `attempt` counts up when the agent asks for more evidence. */
+export const evidence = pgTable(
+  'evidence',
+  {
+    id: text('id').primaryKey(),
+    deliveryId: text('delivery_id')
+      .notNull()
+      .references(() => deliveries.id),
+    attempt: integer('attempt').notNull(),
+    /** Relative to UPLOAD_DIR. Internal; the API exposes a photo URL instead. */
+    photoPath: text('photo_path').notNull(),
+    /** 64-bit perceptual hash (hex), compared across deliveries to catch reused photos. */
+    photoHash: text('photo_hash').notNull(),
+    /** From EXIF, if the phone kept it. */
+    photoTakenAt: timestamp('photo_taken_at', { withTimezone: true }),
+    lat: doublePrecision('lat'),
+    lng: doublePrecision('lng'),
+    gpsAccuracyM: real('gps_accuracy_m'),
+    otpSubmitted: boolean('otp_submitted').notNull().default(false),
+    checks: jsonb('checks').$type<CheckResult[]>().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('evidence_delivery_idx').on(t.deliveryId),
+    unique('evidence_delivery_attempt_unique').on(t.deliveryId, t.attempt),
+  ],
+);
+
 export const agentDecisions = pgTable(
   'agent_decisions',
   {
@@ -126,6 +155,8 @@ export const agentDecisions = pgTable(
     deliveryId: text('delivery_id')
       .notNull()
       .references(() => deliveries.id),
+    /** The upload this decision judged. */
+    evidenceId: text('evidence_id').references(() => evidence.id),
     /** What the model proposed. */
     proposedAction: agentAction('proposed_action').notNull(),
     /** What the policy layer allowed (may differ, e.g. forced escalate). */
@@ -207,5 +238,6 @@ export const webhookEvents = pgTable(
 
 export type Delivery = typeof deliveries.$inferSelect;
 export type NewDelivery = typeof deliveries.$inferInsert;
+export type Evidence = typeof evidence.$inferSelect;
 export type WebhookEvent = typeof webhookEvents.$inferSelect;
 export type NewWebhookEvent = typeof webhookEvents.$inferInsert;

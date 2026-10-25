@@ -4,8 +4,10 @@ import fastifyStatic from '@fastify/static';
 import { Resource } from '@kn0mic/reshaper';
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 import type { Db } from './db/client.js';
+import type { EvidenceService } from './evidence/service.js';
 import type { PayPalClient } from './paypal/index.js';
 import { deliveryRoutes } from './routes/deliveries.js';
+import { evidenceRoutes } from './routes/evidence.js';
 import { healthRoutes, type HealthChecks } from './routes/health.js';
 import { webhookRoutes } from './routes/webhooks.js';
 import type { WebhookEventStore } from './webhooks/store.js';
@@ -13,6 +15,7 @@ import type { WebhookEventStore } from './webhooks/store.js';
 export interface AppDeps {
   logger: FastifyBaseLogger;
   db: Db;
+  evidence: EvidenceService;
   paypal: Pick<PayPalClient, 'verifyWebhookSignature'>;
   webhookStore: WebhookEventStore;
   webhookId: string | undefined;
@@ -32,6 +35,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   await app.register(healthRoutes, { checks: deps.healthChecks });
   await app.register(deliveryRoutes, { prefix: '/api', db: deps.db });
+  await app.register(evidenceRoutes, { prefix: '/api', evidence: deps.evidence });
   await app.register(webhookRoutes, {
     prefix: '/webhooks',
     paypal: deps.paypal,

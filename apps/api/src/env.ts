@@ -4,6 +4,7 @@ import { parseEnv } from 'node:util';
 import { z } from 'zod';
 
 const ROOT_ENV_FILE = resolve(import.meta.dirname, '../../../.env');
+const ROOT_UPLOAD_DIR = resolve(import.meta.dirname, '../../../uploads');
 
 /**
  * Loads the repo-root .env for local dev. Real environment variables always win,
@@ -40,6 +41,8 @@ export const serverEnvSchema = paypalEnvSchema.extend({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   /** Directory with the built web app. Defaults to apps/api/public (populated in the Docker image). */
   WEB_DIST_DIR: optionalString,
+  /** Rider photos. A Docker volume in production; ./uploads at the repo root in dev. */
+  UPLOAD_DIR: z.preprocess(emptyToUndefined, z.string().default(ROOT_UPLOAD_DIR)),
   AI_PROVIDER: optionalString,
   AI_MODEL: optionalString,
   AI_API_KEY: optionalString,
