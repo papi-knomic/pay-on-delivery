@@ -22,7 +22,8 @@
     "db:migrate": "pnpm --filter api db:migrate",
     "smoke:authorize-capture": "pnpm --filter api smoke:authorize-capture",
     "smoke:void": "pnpm --filter api smoke:void",
-    "smoke:payout": "pnpm --filter api smoke:payout"
+    "smoke:payout": "pnpm --filter api smoke:payout",
+    "agent:try": "pnpm --filter api agent:try"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

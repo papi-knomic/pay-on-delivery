@@ -22,6 +22,7 @@ export const evidenceFieldsSchema = z
     lng: optionalNumber(z.number().min(-180).max(180)),
     accuracyM: optionalNumber(z.number().min(0)),
     otp: z.preprocess(blankToUndefined, z.string().trim().max(12).optional()),
+    note: z.preprocess(blankToUndefined, z.string().trim().max(500).optional()),
     utcOffsetMinutes: optionalNumber(z.number().int().min(-840).max(840)),
   })
   .refine((f) => (f.lat === undefined) === (f.lng === undefined), {
@@ -74,6 +75,7 @@ export const evidenceRoutes: FastifyPluginAsync<{ evidence: EvidenceService }> =
           ? { lat: f.lat, lng: f.lng, ...(f.accuracyM !== undefined && { accuracyM: f.accuracyM }) }
           : null,
       otp: f.otp,
+      note: f.note,
       utcOffsetMinutes: f.utcOffsetMinutes,
     });
 

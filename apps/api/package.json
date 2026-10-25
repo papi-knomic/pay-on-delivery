@@ -17,13 +17,18 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "smoke:authorize-capture": "tsx scripts/smoke-authorize-capture.ts",
     "smoke:void": "tsx scripts/smoke-void.ts",
-    "smoke:payout": "tsx scripts/smoke-payout.ts"
+    "smoke:payout": "tsx scripts/smoke-payout.ts",
+    "agent:try": "tsx scripts/try-agent.ts"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.87",
+    "@ai-sdk/google": "^4.0.104",
+    "@ai-sdk/openai": "^4.0.101",
     "@fastify/multipart": "^10.1.6",
     "@fastify/static": "^10.1.5",
     "@kn0mic/reshaper": "^1.0.2",
     "@pod/shared": "workspace:*",
+    "ai": "^7.0.152",
     "bullmq": "^6.3.11",
     "drizzle-orm": "^0.45.3",
     "exifr": "^7.1.3",

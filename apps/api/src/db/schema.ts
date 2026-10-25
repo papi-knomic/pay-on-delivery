@@ -1,4 +1,10 @@
-import { AGENT_ACTIONS, DELIVERY_STATES, type CheckResult } from '@pod/shared';
+import {
+  AGENT_ACTIONS,
+  DELIVERY_STATES,
+  type AgentToolCall,
+  type CheckResult,
+  type OrderItem,
+} from '@pod/shared';
 import { sql } from 'drizzle-orm';
 import {
   boolean,
@@ -78,6 +84,7 @@ export const deliveries = pgTable(
     capturedAmountCents: integer('captured_amount_cents'),
     currency: currency(),
     deliveryAddress: text('delivery_address').notNull(),
+    items: jsonb('items').$type<OrderItem[]>(),
     deliveryLat: doublePrecision('delivery_lat'),
     deliveryLng: doublePrecision('delivery_lng'),
     otpHash: text('otp_hash'),
@@ -139,6 +146,8 @@ export const evidence = pgTable(
     lng: doublePrecision('lng'),
     gpsAccuracyM: real('gps_accuracy_m'),
     otpSubmitted: boolean('otp_submitted').notNull().default(false),
+    /** Free text from the rider. Untrusted: the agent weighs it, never obeys it. */
+    riderNote: text('rider_note'),
     checks: jsonb('checks').$type<CheckResult[]>().notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -167,10 +176,17 @@ export const agentDecisions = pgTable(
     evidenceSummary: text('evidence_summary').notNull(),
     checks: jsonb('checks'),
     policyNotes: text('policy_notes'),
+    /** Shown to the rider when more evidence is requested. */
+    riderMessage: text('rider_message'),
+    toolCalls: jsonb('tool_calls').$type<AgentToolCall[]>(),
     model: text('model'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('agent_decisions_delivery_idx').on(t.deliveryId)],
+  (t) => [
+    index('agent_decisions_delivery_idx').on(t.deliveryId),
+    // One decision per upload, so a retried job reuses it instead of asking the model again.
+    unique('agent_decisions_evidence_unique').on(t.evidenceId),
+  ],
 );
 
 /** One row per PayPal payment object. Reauthorizations are new `authorization` rows linked by parentPaypalId. */
@@ -239,5 +255,6 @@ export const webhookEvents = pgTable(
 export type Delivery = typeof deliveries.$inferSelect;
 export type NewDelivery = typeof deliveries.$inferInsert;
 export type Evidence = typeof evidence.$inferSelect;
+export type AgentDecisionRow = typeof agentDecisions.$inferSelect;
 export type WebhookEvent = typeof webhookEvents.$inferSelect;
 export type NewWebhookEvent = typeof webhookEvents.$inferInsert;

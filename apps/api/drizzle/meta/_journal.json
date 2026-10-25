@@ -15,6 +15,13 @@
       "when": 1792889533507,
       "tag": "0001_solid_tattoo",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792911817214,
+      "tag": "0002_lethal_wallow",
+      "breakpoints": true
     }
   ]
 }

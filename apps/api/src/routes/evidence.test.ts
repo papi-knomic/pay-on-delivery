@@ -21,6 +21,7 @@ const row: Evidence = {
   lng: 3.4723,
   gpsAccuracyM: 12,
   otpSubmitted: true,
+  riderNote: null,
   checks: [{ name: 'gps_distance', status: 'pass', detail: '10 m', value: 10 }],
   createdAt: new Date('2026-10-24T12:06:00Z'),
 };

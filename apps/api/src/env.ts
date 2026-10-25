@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseEnv } from 'node:util';
 import { z } from 'zod';
+import { AI_PROVIDERS, type AiConfig } from './agent/model.js';
 
 const ROOT_ENV_FILE = resolve(import.meta.dirname, '../../../.env');
 const ROOT_UPLOAD_DIR = resolve(import.meta.dirname, '../../../uploads');
@@ -32,6 +33,13 @@ export const paypalEnvSchema = z.object({
   PUBLIC_BASE_URL: z.preprocess(emptyToUndefined, z.url().default('http://localhost:3000')),
 });
 
+const aiEnvShape = {
+  AI_PROVIDER: z.preprocess(emptyToUndefined, z.enum(AI_PROVIDERS).optional()),
+  AI_MODEL: optionalString,
+  AI_API_KEY: optionalString,
+};
+const aiEnvSchema = z.object(aiEnvShape);
+
 export const serverEnvSchema = paypalEnvSchema.extend({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
@@ -43,9 +51,7 @@ export const serverEnvSchema = paypalEnvSchema.extend({
   WEB_DIST_DIR: optionalString,
   /** Rider photos. A Docker volume in production; ./uploads at the repo root in dev. */
   UPLOAD_DIR: z.preprocess(emptyToUndefined, z.string().default(ROOT_UPLOAD_DIR)),
-  AI_PROVIDER: optionalString,
-  AI_MODEL: optionalString,
-  AI_API_KEY: optionalString,
+  ...aiEnvShape,
 });
 
 export type PayPalEnv = z.infer<typeof paypalEnvSchema>;
@@ -65,6 +71,14 @@ function parse<S extends z.ZodType>(schema: S): z.infer<S> {
 
 export const loadPayPalEnv = (): PayPalEnv => parse(paypalEnvSchema);
 export const loadServerEnv = (): ServerEnv => parse(serverEnvSchema);
+
+/** Null when any AI variable is missing: the app still runs, and the agent escalates everything. */
+export function aiConfigFrom(env: z.infer<typeof aiEnvSchema>): AiConfig | null {
+  if (!env.AI_PROVIDER || !env.AI_MODEL || !env.AI_API_KEY) return null;
+  return { provider: env.AI_PROVIDER, model: env.AI_MODEL, apiKey: env.AI_API_KEY };
+}
+
+export const loadAiConfig = (): AiConfig | null => aiConfigFrom(parse(aiEnvSchema));
 
 /** For scripts that need extra variables (e.g. SANDBOX_PAYOUT_RECEIVER_EMAIL). */
 export function requireEnv(name: string): string {

@@ -16,6 +16,7 @@ function delivery(overrides: Partial<Delivery> = {}): Delivery {
     capturedAmountCents: null,
     currency: 'USD',
     deliveryAddress: '12 Admiralty Way, Lekki',
+    items: null,
     deliveryLat: null,
     deliveryLng: null,
     otpHash: 'secret-hash',

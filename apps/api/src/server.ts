@@ -3,9 +3,11 @@ import { sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import { buildApp } from './app.js';
 import { createDb } from './db/client.js';
-import { loadServerEnv } from './env.js';
+import { createLanguageModel } from './agent/model.js';
+import { createVerifier } from './agent/verify.js';
+import { aiConfigFrom, loadServerEnv } from './env.js';
 import { createEvidenceService } from './evidence/service.js';
-import { startJobs } from './jobs/worker.js';
+import { enqueueVerification, startJobs } from './jobs/worker.js';
 import { createLogger } from './logger.js';
 import { createPayPalClient } from './paypal/index.js';
 import { drizzleWebhookEventStore } from './webhooks/store.js';
@@ -23,13 +25,35 @@ async function main(): Promise<void> {
   const { db, pool } = createDb(env.DATABASE_URL);
   const redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: 1, lazyConnect: false });
   redis.on('error', (err) => logger.error({ err }, 'redis error'));
-  const jobs = startJobs(env.REDIS_URL, logger);
   const paypal = createPayPalClient(env, logger);
+
+  const ai = aiConfigFrom(env);
+  if (!ai) {
+    logger.warn('AI_PROVIDER / AI_MODEL / AI_API_KEY not set: every delivery will be escalated');
+  }
+  const verifyDelivery = createVerifier({
+    db,
+    logger,
+    uploadDir: env.UPLOAD_DIR,
+    paypal,
+    model: ai ? createLanguageModel(ai) : null,
+    modelName: ai ? `${ai.provider}/${ai.model}` : undefined,
+  });
+  const jobs = startJobs(env.REDIS_URL, logger, {
+    'verify-delivery': (job) => verifyDelivery(job.data.deliveryId),
+  });
 
   const app = await buildApp({
     logger,
     db,
-    evidence: createEvidenceService({ db, logger, uploadDir: env.UPLOAD_DIR }),
+    evidence: createEvidenceService({
+      db,
+      logger,
+      uploadDir: env.UPLOAD_DIR,
+      onSubmitted: async (ev) => {
+        await enqueueVerification(jobs.queue, { deliveryId: ev.deliveryId, evidenceId: ev.id });
+      },
+    }),
     paypal,
     webhookStore: drizzleWebhookEventStore(db),
     webhookId: env.PAYPAL_WEBHOOK_ID,

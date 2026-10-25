@@ -22,5 +22,23 @@ export const agentDecisionSchema = z.object({
     .describe('USD decimal string such as "6.00". Only for partial_capture.'),
   reasoning: z.string().min(1).describe('Why you chose this action, for the ops team.'),
   evidenceSummary: z.string().min(1).describe('One or two sentences on what the evidence shows.'),
+  riderMessage: z
+    .string()
+    .optional()
+    .describe('For request_evidence: a short, polite instruction shown to the rider.'),
 });
 export type AgentDecision = z.infer<typeof agentDecisionSchema>;
+
+/** A line on the order, so the agent can price a partial delivery. */
+export interface OrderItem {
+  name: string;
+  quantity: number;
+  unitCents: number;
+}
+
+/** A read-only lookup the agent made before deciding; shown in the dashboard. */
+export interface AgentToolCall {
+  tool: string;
+  input: unknown;
+  output: unknown;
+}

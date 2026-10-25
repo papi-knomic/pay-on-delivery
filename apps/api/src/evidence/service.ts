@@ -23,6 +23,7 @@ export interface SubmitEvidenceInput {
   photo: Buffer;
   gps: { lat: number; lng: number; accuracyM?: number } | null;
   otp?: string;
+  note?: string;
   /** The rider's phone UTC offset, used to read EXIF times that carry no zone. */
   utcOffsetMinutes?: number;
 }
@@ -42,6 +43,8 @@ export function createEvidenceService(deps: {
   db: Db;
   logger: Logger;
   uploadDir: string;
+  /** Called after the evidence is committed, e.g. to queue the agent. */
+  onSubmitted?: (evidence: Evidence) => Promise<void>;
   now?: () => Date;
 }): EvidenceService {
   const { db, uploadDir } = deps;
@@ -90,8 +93,9 @@ export function createEvidenceService(deps: {
       await mkdir(join(uploadDir, delivery.id), { recursive: true });
       await writeFile(absolutePath, photo.jpeg);
 
+      let row: Evidence;
       try {
-        const row = await db.transaction(async (tx) => {
+        row = await db.transaction(async (tx) => {
           // Transition first: it locks the delivery row, so a concurrent upload waits and then fails.
           await transitionDelivery(tx, log, delivery.id, delivery.status, 'EVIDENCE_SUBMITTED');
           const [prior] = await tx
@@ -111,6 +115,7 @@ export function createEvidenceService(deps: {
               lng: input.gps?.lng ?? null,
               gpsAccuracyM: input.gps?.accuracyM ?? null,
               otpSubmitted: Boolean(input.otp),
+              riderNote: input.note ?? null,
               checks,
               createdAt: uploadedAt,
             })
@@ -126,12 +131,13 @@ export function createEvidenceService(deps: {
           },
           'evidence submitted',
         );
-        return { ok: true, evidence: row };
       } catch (err) {
         await rm(absolutePath, { force: true });
         if (err instanceof StaleTransitionError) return { ok: false, reason: 'conflict' };
         throw err;
       }
+      await deps.onSubmitted?.(row);
+      return { ok: true, evidence: row };
     },
 
     async photoPath(evidenceId) {

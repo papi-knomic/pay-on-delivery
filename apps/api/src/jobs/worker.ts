@@ -4,11 +4,11 @@ import type { Logger } from '../logger.js';
 export const DELIVERY_LIFECYCLE_QUEUE = 'delivery-lifecycle';
 
 /**
- * Job names for the authorization lifecycle (day 3 flag / day 4 reauthorize / day 29 expire)
- * and the payout polling fallback. Handlers land in week 2; see CLAUDE.md.
+ * verify-delivery runs the agent on new evidence. The rest are the authorization lifecycle
+ * (day 3 flag / day 4 reauthorize / day 29 expire) and the payout polling fallback; see CLAUDE.md.
  */
 export type LifecycleJobName =
-  'flag-honor-period' | 'reauthorize' | 'expire-authorization' | 'poll-payout';
+  'verify-delivery' | 'flag-honor-period' | 'reauthorize' | 'expire-authorization' | 'poll-payout';
 
 export interface LifecycleJobData {
   deliveryId: string;
@@ -20,6 +20,24 @@ export interface Jobs {
   queue: Queue<LifecycleJobData>;
   worker: Worker<LifecycleJobData>;
   close: () => Promise<void>;
+}
+
+/** One job per upload (BullMQ ignores a duplicate jobId). Retries cover transient PayPal errors. */
+export function enqueueVerification(
+  queue: Queue<LifecycleJobData>,
+  input: { deliveryId: string; evidenceId: string },
+): Promise<unknown> {
+  return queue.add(
+    'verify-delivery',
+    { deliveryId: input.deliveryId },
+    {
+      jobId: `verify-${input.evidenceId}`,
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 5_000 },
+      removeOnComplete: 1_000,
+      removeOnFail: 1_000,
+    },
+  );
 }
 
 /** Runs in the API process (per CLAUDE.md). */
