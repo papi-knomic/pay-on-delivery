@@ -4,15 +4,32 @@ import type { Logger } from '../logger.js';
 export const DELIVERY_LIFECYCLE_QUEUE = 'delivery-lifecycle';
 
 /**
- * verify-delivery runs the agent on new evidence. The rest are the authorization lifecycle
- * (day 3 flag / day 4 reauthorize / day 29 expire) and the payout polling fallback; see CLAUDE.md.
+ * verify-delivery runs the agent on new evidence; settle-delivery pushes tracking and pays the
+ * rider after a capture; poll-payout is the fallback for missed payout webhooks. The rest are the
+ * authorization lifecycle (day 3 flag / day 4 reauthorize / day 29 expire); see CLAUDE.md.
  */
 export type LifecycleJobName =
-  'verify-delivery' | 'flag-honor-period' | 'reauthorize' | 'expire-authorization' | 'poll-payout';
+  | 'verify-delivery'
+  | 'settle-delivery'
+  | 'poll-payout'
+  | 'flag-honor-period'
+  | 'reauthorize'
+  | 'expire-authorization';
 
 export interface LifecycleJobData {
   deliveryId: string;
+  /** poll-payout only: which poll this is, so polling can stop. */
+  attempt?: number;
 }
+
+const RETRY = {
+  attempts: 3,
+  backoff: { type: 'exponential', delay: 5_000 },
+  removeOnComplete: 1_000,
+  removeOnFail: 1_000,
+} as const;
+
+const PAYOUT_POLL_DELAY_MS = 60_000;
 
 export type JobHandler = (job: Job<LifecycleJobData>) => Promise<void>;
 
@@ -30,13 +47,27 @@ export function enqueueVerification(
   return queue.add(
     'verify-delivery',
     { deliveryId: input.deliveryId },
-    {
-      jobId: `verify-${input.evidenceId}`,
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 5_000 },
-      removeOnComplete: 1_000,
-      removeOnFail: 1_000,
-    },
+    { ...RETRY, jobId: `verify-${input.evidenceId}` },
+  );
+}
+
+/** One settlement per delivery: a capture happens at most once. */
+export function enqueueSettlement(
+  queue: Queue<LifecycleJobData>,
+  deliveryId: string,
+): Promise<unknown> {
+  return queue.add('settle-delivery', { deliveryId }, { ...RETRY, jobId: `settle-${deliveryId}` });
+}
+
+export function schedulePayoutPoll(
+  queue: Queue<LifecycleJobData>,
+  deliveryId: string,
+  attempt: number,
+): Promise<unknown> {
+  return queue.add(
+    'poll-payout',
+    { deliveryId, attempt },
+    { ...RETRY, delay: PAYOUT_POLL_DELAY_MS, jobId: `poll-payout-${deliveryId}-${attempt}` },
   );
 }
 

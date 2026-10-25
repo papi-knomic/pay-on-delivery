@@ -9,7 +9,7 @@ import type { PayPalClient } from './paypal/index.js';
 import { deliveryRoutes } from './routes/deliveries.js';
 import { evidenceRoutes } from './routes/evidence.js';
 import { healthRoutes, type HealthChecks } from './routes/health.js';
-import { webhookRoutes } from './routes/webhooks.js';
+import { webhookRoutes, type PayPalWebhookEvent } from './routes/webhooks.js';
 import type { WebhookEventStore } from './webhooks/store.js';
 
 export interface AppDeps {
@@ -19,6 +19,7 @@ export interface AppDeps {
   paypal: Pick<PayPalClient, 'verifyWebhookSignature'>;
   webhookStore: WebhookEventStore;
   webhookId: string | undefined;
+  onWebhookEvent?: (event: PayPalWebhookEvent) => Promise<void>;
   healthChecks: HealthChecks;
   /** Built web app to serve (same origin). Skipped if missing, e.g. in dev where Vite serves it. */
   webDistDir?: string;
@@ -41,6 +42,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     paypal: deps.paypal,
     store: deps.webhookStore,
     webhookId: deps.webhookId,
+    onEvent: deps.onWebhookEvent,
   });
 
   const indexHtml = deps.webDistDir ? join(deps.webDistDir, 'index.html') : undefined;

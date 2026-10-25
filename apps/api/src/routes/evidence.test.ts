@@ -40,7 +40,7 @@ async function setup(result: SubmitEvidenceResult = { ok: true, evidence: row })
     db: {} as Db,
     evidence,
     paypal: { verifyWebhookSignature: async () => true },
-    webhookStore: { insertIfNew: async () => true },
+    webhookStore: { record: async () => 'new', markProcessed: async () => {} },
     webhookId: 'WHID',
     healthChecks: { db: async () => {}, redis: async () => {} },
   });

@@ -7,9 +7,16 @@ import { createLanguageModel } from './agent/model.js';
 import { createVerifier } from './agent/verify.js';
 import { aiConfigFrom, loadServerEnv } from './env.js';
 import { createEvidenceService } from './evidence/service.js';
-import { enqueueVerification, startJobs } from './jobs/worker.js';
+import {
+  enqueueSettlement,
+  enqueueVerification,
+  schedulePayoutPoll,
+  startJobs,
+} from './jobs/worker.js';
 import { createLogger } from './logger.js';
 import { createPayPalClient } from './paypal/index.js';
+import { createSettlement } from './settlement/settlement.js';
+import { createWebhookProcessor } from './webhooks/processor.js';
 import { drizzleWebhookEventStore } from './webhooks/store.js';
 
 const SHUTDOWN_TIMEOUT_MS = 15_000;
@@ -31,6 +38,13 @@ async function main(): Promise<void> {
   if (!ai) {
     logger.warn('AI_PROVIDER / AI_MODEL / AI_API_KEY not set: every delivery will be escalated');
   }
+  // The job handlers enqueue follow-up jobs; `jobs` is assigned before any handler can run.
+  const settlement = createSettlement({
+    db,
+    logger,
+    paypal,
+    schedulePoll: (deliveryId, attempt) => schedulePayoutPoll(jobs.queue, deliveryId, attempt),
+  });
   const verifyDelivery = createVerifier({
     db,
     logger,
@@ -38,9 +52,14 @@ async function main(): Promise<void> {
     paypal,
     model: ai ? createLanguageModel(ai) : null,
     modelName: ai ? `${ai.provider}/${ai.model}` : undefined,
+    onCaptured: async (deliveryId) => {
+      await enqueueSettlement(jobs.queue, deliveryId);
+    },
   });
   const jobs = startJobs(env.REDIS_URL, logger, {
     'verify-delivery': (job) => verifyDelivery(job.data.deliveryId),
+    'settle-delivery': (job) => settlement.settle(job.data.deliveryId),
+    'poll-payout': (job) => settlement.pollPayout(job.data.deliveryId, job.data.attempt ?? 1),
   });
 
   const app = await buildApp({
@@ -57,6 +76,7 @@ async function main(): Promise<void> {
     paypal,
     webhookStore: drizzleWebhookEventStore(db),
     webhookId: env.PAYPAL_WEBHOOK_ID,
+    onWebhookEvent: createWebhookProcessor({ db, logger, settlement }),
     healthChecks: {
       db: async () => {
         await db.execute(sql`select 1`);

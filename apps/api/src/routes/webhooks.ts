@@ -18,10 +18,14 @@ const webhookEventSchema = z.object({
   resource: z.object({ id: z.string().optional() }).loose().optional(),
 });
 
+export type PayPalWebhookEvent = z.infer<typeof webhookEventSchema>;
+
 export interface WebhookRoutesOptions {
   paypal: Pick<PayPalClient, 'verifyWebhookSignature'>;
   store: WebhookEventStore;
   webhookId: string | undefined;
+  /** Applies the event to our state. Must be idempotent: a failed event is handled again on redelivery. */
+  onEvent?: (event: PayPalWebhookEvent) => Promise<void>;
 }
 
 /** Registered under /webhooks. Keeps the raw body for signature verification (scoped to this plugin only). */
@@ -72,7 +76,7 @@ export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (ap
     }
     const event = parsed.data;
 
-    const isNew = await opts.store.insertIfNew({
+    const state = await opts.store.record({
       eventId: event.id,
       eventType: event.event_type,
       resourceType: event.resource_type ?? null,
@@ -80,16 +84,26 @@ export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (ap
       summary: event.summary ?? null,
       payload: req.body,
     });
+    const logFields = {
+      eventId: event.id,
+      eventType: event.event_type,
+      resourceId: event.resource?.id,
+      state,
+    };
+    if (state === 'processed') {
+      req.log.info(logFields, 'paypal webhook duplicate skipped');
+      return reply.code(200).send(Resource.wrap({ eventId: event.id, duplicate: true }));
+    }
 
-    req.log.info(
-      {
-        eventId: event.id,
-        eventType: event.event_type,
-        resourceId: event.resource?.id,
-        duplicate: !isNew,
-      },
-      isNew ? 'paypal webhook received' : 'paypal webhook duplicate skipped',
-    );
-    return reply.code(200).send(Resource.wrap({ eventId: event.id, duplicate: !isNew }));
+    req.log.info(logFields, 'paypal webhook received');
+    try {
+      await opts.onEvent?.(event);
+    } catch (err) {
+      // Left unprocessed: PayPal redelivers non-2xx responses and we handle it again.
+      req.log.error({ ...logFields, err }, 'paypal webhook handling failed');
+      return reply.code(500).send(Resource.wrap({ error: 'event handling failed' }));
+    }
+    await opts.store.markProcessed(event.id);
+    return reply.code(200).send(Resource.wrap({ eventId: event.id, duplicate: state !== 'new' }));
   });
 };

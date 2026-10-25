@@ -1,20 +1,40 @@
+import { eq } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { webhookEvents, type NewWebhookEvent } from '../db/schema.js';
 
+/**
+ * `new`: first delivery. `unprocessed`: seen before but handling failed, so handle it again.
+ * `processed`: a true duplicate from PayPal; skip it.
+ */
+export type RecordedState = 'new' | 'unprocessed' | 'processed';
+
 export interface WebhookEventStore {
-  /** Returns false if the event ID was already stored (duplicate delivery from PayPal). */
-  insertIfNew(event: NewWebhookEvent): Promise<boolean>;
+  record(event: NewWebhookEvent): Promise<RecordedState>;
+  markProcessed(eventId: string): Promise<void>;
 }
 
 export function drizzleWebhookEventStore(db: Db): WebhookEventStore {
   return {
-    async insertIfNew(event) {
+    async record(event) {
       const inserted = await db
         .insert(webhookEvents)
         .values(event)
         .onConflictDoNothing({ target: webhookEvents.eventId })
         .returning({ eventId: webhookEvents.eventId });
-      return inserted.length > 0;
+      if (inserted.length > 0) return 'new';
+      const [existing] = await db
+        .select({ processedAt: webhookEvents.processedAt })
+        .from(webhookEvents)
+        .where(eq(webhookEvents.eventId, event.eventId))
+        .limit(1);
+      return existing?.processedAt ? 'processed' : 'unprocessed';
+    },
+
+    async markProcessed(eventId) {
+      await db
+        .update(webhookEvents)
+        .set({ processedAt: new Date() })
+        .where(eq(webhookEvents.eventId, eventId));
     },
   };
 }

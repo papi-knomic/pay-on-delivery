@@ -5,16 +5,24 @@ import { buildApp } from '../app.js';
 import type { Db } from '../db/client.js';
 import type { NewWebhookEvent } from '../db/schema.js';
 import type { EvidenceService } from '../evidence/service.js';
+import type { PayPalWebhookEvent } from './webhooks.js';
 import type { WebhookEventStore } from '../webhooks/store.js';
 
-function memoryStore(): WebhookEventStore & { events: NewWebhookEvent[] } {
+function memoryStore(): WebhookEventStore & { events: NewWebhookEvent[]; processed: Set<string> } {
   const events: NewWebhookEvent[] = [];
+  const processed = new Set<string>();
   return {
     events,
-    async insertIfNew(event) {
-      if (events.some((e) => e.eventId === event.eventId)) return false;
-      events.push(event);
-      return true;
+    processed,
+    async record(event) {
+      if (!events.some((e) => e.eventId === event.eventId)) {
+        events.push(event);
+        return 'new';
+      }
+      return processed.has(event.eventId) ? 'processed' : 'unprocessed';
+    },
+    async markProcessed(eventId) {
+      processed.add(eventId);
     },
   };
 }
@@ -33,7 +41,13 @@ afterEach(async () => {
   app = undefined;
 });
 
-async function setup(opts: { verified?: boolean | Error; webhookId?: string } = {}) {
+async function setup(
+  opts: {
+    verified?: boolean | Error;
+    webhookId?: string;
+    onWebhookEvent?: (event: PayPalWebhookEvent) => Promise<void>;
+  } = {},
+) {
   const store = memoryStore();
   const verifyWebhookSignature = vi.fn(async () => {
     if (opts.verified instanceof Error) throw opts.verified;
@@ -46,6 +60,7 @@ async function setup(opts: { verified?: boolean | Error; webhookId?: string } = 
     paypal: { verifyWebhookSignature },
     webhookStore: store,
     webhookId: 'webhookId' in opts ? opts.webhookId : 'WHID',
+    onWebhookEvent: opts.onWebhookEvent,
     healthChecks: { db: async () => {}, redis: async () => {} },
   });
   const post = (payload: string) =>
@@ -77,13 +92,41 @@ describe('POST /webhooks/paypal', () => {
     });
   });
 
-  it('skips duplicates by event ID', async () => {
-    const { store, post } = await setup();
+  it('skips duplicates by event ID once processed', async () => {
+    const onWebhookEvent = vi.fn(async () => {});
+    const { store, post } = await setup({ onWebhookEvent });
     await post(JSON.stringify(event));
     const res = await post(JSON.stringify(event));
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ data: { eventId: 'WH-123', duplicate: true } });
     expect(store.events).toHaveLength(1);
+    expect(onWebhookEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it('hands the parsed event, including its resource, to the handler', async () => {
+    const onWebhookEvent = vi.fn(async (_e: PayPalWebhookEvent) => {});
+    const { post } = await setup({ onWebhookEvent });
+    await post(JSON.stringify({ ...event, resource: { id: 'CAP-1', status: 'COMPLETED' } }));
+    expect(onWebhookEvent.mock.calls[0]![0]).toMatchObject({
+      event_type: 'PAYMENT.CAPTURE.COMPLETED',
+      resource: { id: 'CAP-1', status: 'COMPLETED' },
+    });
+  });
+
+  it('returns 500 when handling fails, and handles the redelivery', async () => {
+    const onWebhookEvent = vi
+      .fn<(e: PayPalWebhookEvent) => Promise<void>>()
+      .mockRejectedValueOnce(new Error('db down'))
+      .mockResolvedValueOnce();
+    const { store, post } = await setup({ onWebhookEvent });
+
+    expect((await post(JSON.stringify(event))).statusCode).toBe(500);
+    expect(store.processed.has('WH-123')).toBe(false);
+
+    const retry = await post(JSON.stringify(event));
+    expect(retry.statusCode).toBe(200);
+    expect(onWebhookEvent).toHaveBeenCalledTimes(2);
+    expect(store.processed.has('WH-123')).toBe(true);
   });
 
   it('rejects invalid signatures without storing', async () => {
